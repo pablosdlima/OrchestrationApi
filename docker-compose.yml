@@ -1,0 +1,139 @@
+version: '3.9'
+
+services:
+
+  # ─── INFRAESTRUTURA ───────────────────────────────────────
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    restart: always
+    ports:
+      - "1433:1433"
+    environment:
+      SA_PASSWORD: "Senha@123"
+      ACCEPT_EULA: "Y"
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: mongo-express
+    restart: always
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: root
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+
+  # ─── MICROSSERVIÇOS ───────────────────────────────────────
+
+  users-api:
+    build:
+      context: ../UsersAPI
+      dockerfile: Dockerfile
+    container_name: users-api
+    restart: always
+    ports:
+      - "5001:8080"
+    depends_on:
+      - sqlserver
+      - mongodb
+      - rabbitmq
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MS_UserAPI=Server=sqlserver,1433;Database=MS_UsersAPI;User Id=sa;Password=Senha@123;TrustServerCertificate=True
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=admin
+      - RabbitMQ__Password=admin
+      - Jwt__Key=af3b1d967c45e0df2b84ca91fe3a9d6f1148e2c0e9b7d04a51f396cb8f0a7d32
+      - Jwt__Issuer=UserAPI
+      - Jwt__Audience=https://api.UserAPI.com
+      - Serilog__WriteTo__0__Args__databaseUrl=mongodb://root:root@mongodb:27017/logs_dev?authSource=admin
+
+  catalog-api:
+    build:
+      context: ../CatalogAPI
+      dockerfile: Dockerfile
+    container_name: catalog-api
+    restart: always
+    ports:
+      - "5002:8080"
+    depends_on:
+      - sqlserver
+      - mongodb
+      - rabbitmq
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MS_CatalogAPI=Server=sqlserver,1433;Database=MS_CatalogAPI;User Id=sa;Password=Senha@123;TrustServerCertificate=True
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=admin
+      - RabbitMQ__Password=admin
+      - Jwt__Key=af3b1d967c45e0df2b84ca91fe3a9d6f1148e2c0e9b7d04a51f396cb8f0a7d32
+      - Jwt__Issuer=CatalogAPI
+      - Jwt__Audience=https://api.CatalogAPI.com
+      - Serilog__WriteTo__0__Args__databaseUrl=mongodb://root:root@mongodb:27017/logs_dev?authSource=admin
+
+  payments-api:
+    build:
+      context: ../PaymentsAPI
+      dockerfile: Dockerfile
+    container_name: payments-api
+    restart: always
+    ports:
+      - "5003:8080"
+    depends_on:
+      - sqlserver
+      - mongodb
+      - rabbitmq
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MS_PaymentAPI=Server=sqlserver,1433;Database=MS_PaymentAPI;User Id=sa;Password=Senha@123;TrustServerCertificate=True
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=admin
+      - RabbitMQ__Password=admin
+      - Serilog__WriteTo__0__Args__databaseUrl=mongodb://root:root@mongodb:27017/logs_dev?authSource=admin
+
+  notifications-api:
+    build:
+      context: ../NotificationsAPI
+      dockerfile: Dockerfile
+    container_name: notifications-api
+    restart: always
+    ports:
+      - "5004:8080"
+    depends_on:
+      - sqlserver
+      - mongodb
+      - rabbitmq
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MS_NotificationsAPI=Server=sqlserver,1433;Database=MS_NotificationsAPI;User Id=sa;Password=Senha@123;TrustServerCertificate=True
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=admin
+      - RabbitMQ__Password=admin
+      - Serilog__WriteTo__0__Args__databaseUrl=mongodb://root:root@mongodb:27017/logs_dev?authSource=admin
