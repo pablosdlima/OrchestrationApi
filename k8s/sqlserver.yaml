@@ -1,0 +1,60 @@
+# ─── PersistentVolumeClaim ───────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim # pedido de armazenamento persistente
+metadata:
+  name: sqlserver-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce # apenas 1 Pod pode ler e escrever por vez
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+# ─── Deployment ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sqlserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sqlserver
+  template:
+    metadata:
+      labels:
+        app: sqlserver
+    spec:
+      containers:
+        - name: sqlserver
+          image: mcr.microsoft.com/mssql/server:2022-latest
+          ports:
+            - containerPort: 1433
+          env:
+            - name: SA_PASSWORD
+              value: "Senha@123"
+            - name: ACCEPT_EULA
+              value: "Y" # aceite obrigatório da licença da Microsoft
+          volumeMounts:
+            - name: sqlserver-data
+              mountPath: /var/opt/mssql  # onde o SQL Server guarda os dados
+      volumes:
+        - name: sqlserver-data
+          persistentVolumeClaim:
+            claimName: sqlserver-pvc
+
+---
+# ─── Service ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: sqlserver-service
+spec:
+  selector:
+    app: sqlserver
+  ports:
+    - protocol: TCP
+      port: 1433
+      targetPort: 1433
+  type: ClusterIP # só acessível dentro do cluster
