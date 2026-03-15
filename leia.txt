@@ -1,0 +1,18 @@
+# 1º Infraestrutura
+kubectl apply -f k8s/
+
+# 2º Aguarda Running
+kubectl get pods -w
+
+# 3º Microsserviços
+cd ../UsersAPI
+kubectl apply -f k8s/
+cd ../CatalogAPI
+kubectl apply -f k8s/
+cd ../PaymentsAPI
+kubectl apply -f k8s/
+cd ../NotificationsAPI
+kubectl apply -f k8s/
+
+# 4º Verifica as portas
+kubectl get services

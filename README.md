@@ -364,16 +364,73 @@ Cada microsserviço possui seu próprio banco no SQL Server:
 
 As migrations são aplicadas automaticamente na inicialização de cada serviço.
 
+### Connection Strings
+
+| Ambiente | Connection String |
+|---|---|
+| **Docker Compose** | `Server=sqlserver,1433;User Id=sa;Password=Senha@123;TrustServerCertificate=True` |
+| **Kubernetes (interno)** | `Server=sqlserver-service,1433;User Id=sa;Password=Senha@123;TrustServerCertificate=True` |
+
+> ℹ️ No Kubernetes, os microsserviços se comunicam com o SQL Server pelo nome do Service (`sqlserver-service`). Acesso externo via SSMS ou Azure Data Studio requer expor o serviço como `NodePort`.
+
+### Acessando o SQL Server externamente (Kubernetes)
+
+Por padrão o SQL Server no Kubernetes está configurado como `ClusterIP` — acessível apenas dentro do cluster. Para acessar externamente via SSMS ou Azure Data Studio, use o `port-forward`:
+
+```bash
+# Descobre o nome do Pod do SQL Server
+kubectl get pods
+
+# Cria um túnel temporário
+kubectl port-forward pod/sqlserver-xxx 1433:1433
+```
+
+Enquanto o comando estiver rodando, acesse pelo SSMS:
+```
+Servidor:  localhost,1433
+Usuário:   sa
+Senha:     Senha@123
+```
+
 ---
 
 ## ⚙️ Variáveis de Ambiente
 
-| Variável | Valor |
-|---|---|
-| `SA_PASSWORD` | `Senha@123` |
-| `RabbitMQ__Username` | `admin` |
-| `RabbitMQ__Password` | `admin` |
-| `Jwt__Key` | `af3b1d967c45e0df2b84ca91fe3a9d6f1148e2c0e9b7d04a51f396cb8f0a7d32` |
+### 🗄️ SQL Server
+
+| Variável | Valor | Usado em |
+|---|---|---|
+| `SA_PASSWORD` | `Senha@123` | Senha do usuário administrador do SQL Server |
+| `SA_USER` | `sa` | Usuário administrador do SQL Server |
+| `ACCEPT_EULA` | `Y` | Aceite obrigatório da licença Microsoft do SQL Server |
+
+### 🍃 MongoDB
+
+| Variável | Valor | Usado em |
+|---|---|---|
+| `MONGO_INITDB_ROOT_USERNAME` | `root` | Usuário administrador do MongoDB |
+| `MONGO_INITDB_ROOT_PASSWORD` | `root` | Senha do administrador do MongoDB |
+
+### 🐇 RabbitMQ
+
+| Variável | Valor | Usado em |
+|---|---|---|
+| `RabbitMQ__Username` | `admin` | Usuário de conexão ao RabbitMQ — usado por todos os microsserviços |
+| `RabbitMQ__Password` | `admin` | Senha de conexão ao RabbitMQ — usado por todos os microsserviços |
+
+### 🔐 JWT
+
+| Variável | Valor | Usado em |
+|---|---|---|
+| `Jwt__Key` | `af3b1d967c45e0df2b84...` | Chave de assinatura dos tokens JWT — UsersAPI e CatalogAPI |
+| `Jwt__Issuer` | `UserAPI` / `CatalogAPI` | Identificador de quem emitiu o token — varia por serviço |
+| `Jwt__Audience` | `https://api.UserAPI.com` | Para quem o token é válido — varia por serviço |
+
+### 📋 Serilog (Logs)
+
+| Variável | Valor | Usado em |
+|---|---|---|
+| `Serilog__WriteTo__0__Args__databaseUrl` | `mongodb://root:root@mongodb:27017/logs_dev` | URL de conexão ao MongoDB para gravação de logs — usado por todos os microsserviços |
 
 > ⚠️ Estes valores são apenas para desenvolvimento local. Em produção, utilize variáveis de ambiente seguras ou um cofre de segredos (ex: Azure Key Vault).
 
@@ -402,7 +459,7 @@ docker compose down -v
 
 ---
 
-## 📸 Ambiente Rodando 
+## 📸 Ambiente Rodando
 
 Todos os containers em execução via Docker Desktop:
 
@@ -413,6 +470,8 @@ Todos os containers em execução via Docker Desktop:
 ## 📸 Ambiente Rodando - Kubernetes
 
 ![Kubernetes - Todos os Pods no ar](./assets/Captura_de_tela_2026-03-11_194700.png)
+
+---
 
 ## 🎓 Contexto Acadêmico
 
