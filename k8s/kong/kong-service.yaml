@@ -1,0 +1,32 @@
+# ─── Service ─────────────────────────────────────────────────
+# Expõe o Kong para fora do cluster via NodePort.
+# Responsabilidade: definir as portas externas de acesso ao gateway.
+#
+# Portas expostas:
+#   30080 → proxy HTTP  (entrada de todas as requisições dos clientes)
+#   30081 → Admin API   (gerenciamento via curl ou ferramentas REST)
+#   30082 → Kong Manager OSS (interface web de visualização)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-proxy
+  namespace: kong
+spec:
+  type: NodePort
+  selector:
+    app: kong
+  ports:
+    - name: proxy
+      port: 80
+      targetPort: 8000
+      nodePort: 30080   # http://localhost:30080 → entrada do gateway (proxy)
+
+    - name: admin
+      port: 8001
+      targetPort: 8001
+      nodePort: 30081   # http://localhost:30081 → Admin API (gerenciamento kong)
+
+    - name: manager
+      port: 8002
+      targetPort: 8002
+      nodePort: 30082   # http://localhost:30082 → Kong Manager OSS

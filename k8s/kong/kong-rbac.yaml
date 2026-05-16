@@ -1,0 +1,62 @@
+# ─── ServiceAccount ──────────────────────────────────────────
+# Identidade do Kong dentro do cluster Kubernetes.
+# O Kong usa essa conta para se autenticar ao fazer chamadas
+# à API do Kubernetes (ex: descobrir endpoints de serviços).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kong
+  namespace: kong
+
+---
+# ─── ClusterRole ─────────────────────────────────────────────
+# Define quais recursos do cluster o Kong pode acessar.
+# Permissões de leitura (get, list, watch) são suficientes —
+# o Kong não precisa criar ou modificar recursos do cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kong-clusterrole
+rules:
+  - apiGroups: [""]
+    resources:
+      - endpoints
+      - nodes
+      - pods
+      - secrets
+      - services
+      - namespaces
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - ingressclasses
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses/status
+    verbs: ["update"]
+  - apiGroups: ["configuration.konghq.com"]
+    resources:
+      - kongplugins
+      - kongclusterplugins
+      - kongconsumers
+      - kongingresses
+    verbs: ["get", "list", "watch"]
+
+---
+# ─── ClusterRoleBinding ──────────────────────────────────────
+# Liga o ClusterRole à ServiceAccount do Kong.
+# Sem esse binding, o Kong teria a conta mas sem permissões.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kong-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kong-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: kong
+    namespace: kong

@@ -1,18 +1,57 @@
-# 1º Infraestrutura
+1. Buildar as imagens
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\UsersAPI"
+docker build -t orchestrationapi-users-api:latest .
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\CatalogAPI"
+docker build -t orchestrationapi-catalog-api:latest .
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\PaymentsAPI"
+docker build -t orchestrationapi-payments-api:latest .
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\NotificationsAPI"
+docker build -t orchestrationapi-notifications-api:latest .
+
+***************************************************************************************************************
+2 - Subir infraestrutura Orquestração.
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\OrchestrationAPI"
 kubectl apply -f k8s/
 
-# 2º Aguarda Running
+**************************************************************************************************************
+3 - 3. Aguardar infraestrutura (Ctrl+C após os 3 ficarem Running)
+
 kubectl get pods -w
 
-# 3º Microsserviços
-cd ../UsersAPI
-kubectl apply -f k8s/
-cd ../CatalogAPI
-kubectl apply -f k8s/
-cd ../PaymentsAPI
-kubectl apply -f k8s/
-cd ../NotificationsAPI
+**************************************************************************************************************
+
+4. Subir microsserviços
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\UsersAPI"
 kubectl apply -f k8s/
 
-# 4º Verifica as portas
-kubectl get services
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\CatalogAPI"
+kubectl apply -f k8s/
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\PaymentsAPI"
+kubectl apply -f k8s/
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\NotificationsAPI"
+kubectl apply -f k8s/
+****************************************************************************************************************
+
+5. Verificar pods e portas
+
+kubectl get pods
+kubectl get services (em ports "Porta interna: Porta Externa")
+
+***************************************************************************************************************
+
+6 - Parar os serviços.
+
+cd "C:\Users\Administrador\Desktop\Estudos\Arquitetura de Software em Dotnet com Azure - FIAP\Fase - 2\Projeto\OrchestrationAPI"
+kubectl delete -f ../UsersAPI/k8s/
+kubectl delete -f ../CatalogAPI/k8s/
+kubectl delete -f ../PaymentsAPI/k8s/
+kubectl delete -f ../NotificationsAPI/k8s/
+kubectl delete -f k8s/

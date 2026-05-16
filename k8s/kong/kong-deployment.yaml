@@ -1,0 +1,71 @@
+# ─── Deployment ──────────────────────────────────────────────
+# Gerencia o ciclo de vida do Pod do Kong.
+# Responsabilidade: manter o Kong rodando, definir variáveis
+# de ambiente e montar o ConfigMap de configuração.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: kong
+  labels:
+    app: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+    spec:
+      serviceAccountName: kong
+      containers:
+        - name: kong
+          image: kong:3.4
+          imagePullPolicy: IfNotPresent
+          env:
+            # Modo DB-less: toda configuração vem do kong-config.yaml (ConfigMap)
+            - name: KONG_DATABASE
+              value: "off"
+            # Caminho do arquivo declarativo montado via ConfigMap
+            - name: KONG_DECLARATIVE_CONFIG
+              value: "/kong/declarative/kong.yaml"
+            # Logs no stdout/stderr para facilitar coleta por ferramentas de observabilidade
+            - name: KONG_PROXY_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_ADMIN_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_PROXY_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_ERROR_LOG
+              value: "/dev/stderr"
+            # Admin API disponível em todas as interfaces do Pod
+            - name: KONG_ADMIN_LISTEN
+              value: "0.0.0.0:8001"
+            # Kong Manager OSS: interface web gratuita disponível no Kong 3.x
+            - name: KONG_ADMIN_GUI_LISTEN
+              value: "0.0.0.0:8002"
+            # URL externa do Kong Manager (usada para gerar links internos da interface)
+            - name: KONG_ADMIN_GUI_URL
+              value: "http://localhost:30082"
+            # Desabilita o Ingress Controller — usamos configuração declarativa
+            - name: KONG_INGRESS_CONTROLLER
+              value: "off"
+          ports:
+            - name: proxy
+              containerPort: 8000   # tráfego HTTP das requisições dos clientes
+            - name: proxy-ssl
+              containerPort: 8443   # tráfego HTTPS das requisições dos clientes
+            - name: admin
+              containerPort: 8001   # Admin API (gerenciamento programático)
+            - name: manager
+              containerPort: 8002   # Kong Manager OSS (interface web)
+          volumeMounts:
+            - name: kong-config
+              mountPath: /kong/declarative
+      volumes:
+        # Monta o ConfigMap definido em kong-config.yaml como arquivo dentro do Pod
+        - name: kong-config
+          configMap:
+            name: kong-config

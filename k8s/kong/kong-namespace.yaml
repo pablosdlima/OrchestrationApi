@@ -1,0 +1,8 @@
+# ─── Namespace ───────────────────────────────────────────────
+# Namespace isolado para todos os componentes do Kong.
+# Separar do namespace 'default' permite gerenciar, escalar
+# e remover o gateway sem afetar os microsserviços.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kong

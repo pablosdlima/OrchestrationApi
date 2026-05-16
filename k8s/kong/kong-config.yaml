@@ -1,0 +1,135 @@
+# ─── ConfigMap ───────────────────────────────────────────────
+# Configuração declarativa do Kong em modo DB-less.
+# Este arquivo é montado como kong.yaml dentro do Pod do Kong.
+#
+# ─────────────────────────────────────────────────────────────
+# ESTRUTURA DO ARQUIVO
+# ─────────────────────────────────────────────────────────────
+#
+#   services:  backends — endereços internos dos microsserviços
+#   routes:    entradas — caminhos que o gateway escuta
+#   plugins:   proteções — comportamentos aplicados às requisições
+#   consumers: identidades — quem está autorizado a usar o gateway
+#
+# ─────────────────────────────────────────────────────────────
+# SOBRE OS PLUGINS DE SEGURANÇA
+# ─────────────────────────────────────────────────────────────
+#
+#   jwt
+#     Valida o token JWT em todas as requisições.
+#     Sem token ou com token inválido → 401 Unauthorized.
+#
+#   rate-limiting
+#     Limita o número de requisições por cliente.
+#     Limite: 30 por minuto / 500 por hora.
+#     Quando excedido → 429 Too Many Requests.
+#
+#   cors
+#     Controla quais origens podem acessar a API.
+#     Protege contra requisições de domínios não autorizados.
+#
+#   request-size-limiting
+#     Bloqueia requisições com payload acima de 10MB.
+#     Protege contra ataques de negação de serviço (DoS).
+#     Quando excedido → 413 Payload Too Large.
+#
+# ─────────────────────────────────────────────────────────────
+# SOBRE O CONSUMER E OS VALORES JWT
+# ─────────────────────────────────────────────────────────────
+#
+#   username
+#     Nome identificador do consumer no Kong.
+#     Valor livre — usado apenas para identificação interna.
+#
+#   key: OrchestrationAPI
+#     Deve ser IGUAL ao campo Jwt__Issuer do secret.yaml da UsersAPI.
+#     O token JWT carrega esse valor no campo 'iss' (issuer).
+#     O Kong usa o 'iss' para localizar o consumer correto
+#     e buscar o secret para validar a assinatura.
+#
+#   secret: af3b1d967c...
+#     Deve ser IGUAL ao campo Jwt__Key do secret.yaml da UsersAPI
+#     (decodificado do Base64).
+#     A UsersAPI usa essa chave para ASSINAR o token.
+#     O Kong usa a MESMA chave para VERIFICAR a assinatura.
+#
+#     É como um cadeado e uma chave:
+#       UsersAPI assina com a chave  → "fecha o cadeado"
+#       Kong verifica com a mesma chave → "abre o cadeado pra checar"
+#
+#     Se as chaves forem diferentes → Kong rejeita com 401.
+#
+# ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: kong
+data:
+  kong.yaml: |
+    _format_version: "3.0"
+
+    services:
+      - name: users-api
+        url: http://users-api-service.default.svc.cluster.local:80
+
+      - name: catalog-api
+        url: http://catalog-api-service.default.svc.cluster.local:80
+
+    routes:
+      - name: users-api-route
+        service: users-api
+        paths:
+          - /users
+        strip_path: true
+
+      - name: catalog-api-route
+        service: catalog-api
+        paths:
+          - /catalog
+        strip_path: true
+
+    plugins:
+      - name: jwt
+        config:
+          claims_to_verify:
+            - exp
+          key_claim_name: iss
+
+      - name: rate-limiting
+        config:
+          minute: 30
+          hour: 500
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          exposed_headers:
+            - X-RateLimit-Limit-Minute
+            - X-RateLimit-Remaining-Minute
+          credentials: true
+          max_age: 3600
+
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 10
+          size_unit: megabytes
+
+    consumers:
+      - username: orchestration-api
+        jwt_secrets:
+          - key: OrchestrationAPI
+            secret: af3b1d967c45e0df2b84ca91fe3a9d6f1148e2c0e9b7d04a51f396cb8f0a7d32

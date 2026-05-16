@@ -1,0 +1,410 @@
+# ═══════════════════════════════════════════════════════════════
+# GUIA DE OPERAÇÃO — KONG API GATEWAY
+# FCG - FIAP Cloud Games | Tech Challenge Fase 3
+# ═══════════════════════════════════════════════════════════════
+
+
+# ───────────────────────────────────────────────────────────────
+# ESTRUTURA DE ARQUIVOS E RESPONSABILIDADES
+# ───────────────────────────────────────────────────────────────
+#
+# k8s/kong/
+# ├── kong-namespace.yaml    → cria o namespace 'kong' no cluster
+# ├── kong-rbac.yaml         → permissões do Kong no cluster
+# ├── kong-deployment.yaml   → Pod do Kong + variáveis de ambiente
+# ├── kong-service.yaml      → portas externas do gateway
+# └── kong-config.yaml       → configuração declarativa completa
+#
+# kong-visual/               → ambiente de demonstração visual
+# ├── docker-compose.yml     → Kong + Konga + PostgreSQL
+# ├── .env                   → variáveis de ambiente
+# └── README.md              → instruções de uso
+#
+#
+# ── kong-namespace.yaml ────────────────────────────────────────
+# Cria o namespace 'kong' no cluster Kubernetes.
+# Um namespace é como uma "pasta" que agrupa e isola recursos.
+# Separar o Kong do namespace 'default' permite:
+#   - Gerenciar o gateway sem afetar os microsserviços
+#   - Aplicar permissões diferentes para cada namespace
+#   - Remover ou recriar o Kong sem derrubar as APIs
+#
+#
+# ── kong-rbac.yaml ─────────────────────────────────────────────
+# Define as permissões do Kong dentro do cluster. Contém 3 recursos:
+#
+#   ServiceAccount     → identidade do Kong no cluster
+#   ClusterRole        → define O QUE o Kong pode fazer (só leitura)
+#   ClusterRoleBinding → liga o ClusterRole à ServiceAccount
+#
+#
+# ── kong-deployment.yaml ───────────────────────────────────────
+# Gerencia o Pod do Kong no cluster. É responsável por:
+#   - Definir qual imagem usar (kong:3.4)
+#   - Configurar variáveis de ambiente:
+#       KONG_DATABASE=off         → modo DB-less (sem banco de dados)
+#       KONG_DECLARATIVE_CONFIG   → caminho do arquivo de configuração
+#       KONG_ADMIN_LISTEN         → habilita a Admin API na porta 8001
+#       KONG_ADMIN_GUI_LISTEN     → habilita o Kong Manager na porta 8002
+#       KONG_ADMIN_GUI_URL        → URL externa do Kong Manager
+#   - Montar o ConfigMap (kong-config.yaml) como arquivo dentro do Pod
+#   - Definir as portas internas do container:
+#       8000 → proxy HTTP (entrada das requisições)
+#       8001 → Admin API
+#       8002 → Kong Manager OSS (interface web)
+#
+#
+# ── kong-service.yaml ──────────────────────────────────────────
+# Expõe o Kong para fora do cluster via NodePort.
+# Define as portas externas (acessíveis pelo navegador/terminal):
+#
+#   30080 → Proxy HTTP
+#           Porta principal — todas as requisições das APIs passam aqui.
+#           Exemplo: http://localhost:8000/users/api/Roles/ListarRoles
+#           ⚠️ Requer token JWT válido no header Authorization.
+#
+#   30081 → Admin API
+#           Porta de gerenciamento do Kong.
+#           Permite consultar rotas, serviços e plugins via REST.
+#           Exemplos:
+#             http://localhost:8001/routes    → lista as rotas configuradas
+#             http://localhost:8001/services  → lista os backends
+#             http://localhost:8001/consumers → lista os consumidores
+#             http://localhost:8001/plugins   → lista os plugins ativos
+#           ⚠️ Nunca expor publicamente em produção.
+#
+#   30082 → Kong Manager OSS
+#           Interface web gratuita disponível no Kong 3.x.
+#           Permite visualizar as configurações graficamente.
+#           ⚠️ Em modo DB-less tem limitações de exibição.
+#           Use a Admin API (30081) para verificações confiáveis.
+#
+#
+# ── kong-config.yaml ───────────────────────────────────────────
+# Configuração declarativa do Kong em modo DB-less.
+# É o coração do gateway — define todo o comportamento do Kong.
+# Montado como arquivo kong.yaml dentro do Pod via ConfigMap.
+# Contém 4 seções:
+#
+#   services  → backends — para onde o Kong envia as requisições.
+#               Cada service aponta para um microsserviço interno
+#               usando o endereço DNS do Kubernetes:
+#               <service-name>.<namespace>.svc.cluster.local
+#
+#   routes    → entradas — por qual caminho a requisição chega.
+#               Cada route referencia um service e define o path:
+#                 /users   → UsersAPI
+#                 /catalog → CatalogAPI
+#
+#   plugins   → proteções aplicadas globalmente a todas as rotas:
+#                 jwt                  → valida token JWT
+#                 rate-limiting        → limita requisições por minuto/hora
+#                 cors                 → controla origens permitidas
+#                 request-size-limiting → bloqueia payloads grandes
+#
+#   consumers → identidades autorizadas a usar o gateway.
+#               O 'key' deve ser igual ao valor do 'iss' no token JWT.
+#               O 'secret' deve ser igual à chave de assinatura do token
+#               (Jwt__Key do secret.yaml decodificado do Base64).
+
+
+# ───────────────────────────────────────────────────────────────
+# PLUGINS DE SEGURANÇA CONFIGURADOS
+# ───────────────────────────────────────────────────────────────
+#
+#   jwt
+#     Valida o token JWT em todas as requisições.
+#     Verifica: existência, expiração (exp) e emissor (iss).
+#     Sem token ou com token inválido → 401 Unauthorized.
+#
+#   rate-limiting
+#     Limita o número de requisições por cliente.
+#     Limite: 30 por minuto / 500 por hora.
+#     Quando excedido → 429 Too Many Requests.
+#     Headers de controle expostos na resposta:
+#       X-RateLimit-Limit-Minute     → limite configurado
+#       X-RateLimit-Remaining-Minute → requisições restantes
+#
+#   cors
+#     Controla quais origens podem acessar a API.
+#     Configurado para aceitar qualquer origem (*).
+#     Ajuste em produção para origens específicas.
+#
+#   request-size-limiting
+#     Bloqueia requisições com payload acima de 10MB.
+#     Protege contra ataques de negação de serviço (DoS).
+#     Quando excedido → 413 Payload Too Large.
+
+
+# ───────────────────────────────────────────────────────────────
+# FLUXO DO API GATEWAY
+# ───────────────────────────────────────────────────────────────
+#
+# Cliente (curl/Postman)
+#     │
+#     ▼
+# Kong Gateway (localhost:8000)
+#     │
+#     ├── 1. Valida token JWT
+#     │     ├── Sem token ou inválido → 401 Unauthorized ❌
+#     │     └── Token válido → continua ✅
+#     │
+#     ├── 2. Verifica rate-limiting
+#     │     ├── Limite excedido → 429 Too Many Requests ❌
+#     │     └── Dentro do limite → continua ✅
+#     │
+#     ├── 3. Verifica CORS e tamanho do payload
+#     │     └── Payload > 10MB → 413 Payload Too Large ❌
+#     │
+#     └── 4. Roteia para o microsserviço correto
+#           ├── /users/*   → UsersAPI   (users-api-service.default:80)
+#           └── /catalog/* → CatalogAPI (catalog-api-service.default:80)
+#
+# Vantagens:
+#   - Um único ponto de entrada para todos os serviços
+#   - Segurança centralizada (JWT + rate-limiting + CORS)
+#   - Microsserviços não ficam expostos diretamente
+#   - Configuração versionada no repositório Git
+
+
+# ───────────────────────────────────────────────────────────────
+# PRÉ-REQUISITOS
+# ───────────────────────────────────────────────────────────────
+# - Docker Desktop com Kubernetes habilitado e rodando
+# - kubectl configurado (contexto: docker-desktop)
+# - Microsserviços rodando no namespace default
+# - Kong rodando no namespace kong
+
+# Verificar se tudo está rodando:
+kubectl get pods
+kubectl get pods -n kong
+
+
+# ───────────────────────────────────────────────────────────────
+# PASSO 1 — SUBIR OS PORT-FORWARDS
+# ───────────────────────────────────────────────────────────────
+# ATENÇÃO: cada comando abaixo precisa rodar em um terminal separado
+# e manter o terminal aberto enquanto estiver usando.
+
+# Terminal 1 — Proxy do Kong (entrada das requisições)
+kubectl port-forward service/kong-proxy 8000:80 -n kong
+
+# Terminal 2 — Admin API do Kong (verificar configurações)
+kubectl port-forward service/kong-proxy 8001:8001 -n kong
+
+# Terminal 3 — Kong Manager OSS (interface web)
+kubectl port-forward service/kong-proxy 8002:8002 -n kong
+
+# Terminal 4 — UsersAPI direta (para gerar token JWT)
+kubectl port-forward service/users-api-service 5001:80
+
+
+# ───────────────────────────────────────────────────────────────
+# PASSO 2 — VERIFICAR CONFIGURAÇÕES DO KONG
+# ───────────────────────────────────────────────────────────────
+# Com o Terminal 2 rodando, acesse no navegador:
+
+# Rotas configuradas:
+http://localhost:8001/routes
+
+# Serviços (backends) configurados:
+http://localhost:8001/services
+
+# Consumers autorizados:
+http://localhost:8001/consumers
+
+# Plugins ativos:
+http://localhost:8001/plugins
+
+# Interface web Kong Manager OSS:
+http://localhost:8002
+
+
+# ───────────────────────────────────────────────────────────────
+# PASSO 3 — GERAR TOKEN JWT
+# ───────────────────────────────────────────────────────────────
+# Com o Terminal 4 rodando, acesse o Swagger da UsersAPI:
+http://localhost:5001/swagger
+
+# 1. Acesse POST /api/Authentication/login
+# 2. Clique em "Try it out"
+# 3. Preencha com as credenciais:
+{
+  "usuario": "seu_usuario",
+  "senha": "sua_senha"
+}
+# 4. Clique em "Execute"
+# 5. Copie o token retornado no campo "token"
+
+# ATENÇÃO: o token expira em aproximadamente 30 minutos.
+# Gere um novo token sempre que receber erro 401.
+
+
+# ───────────────────────────────────────────────────────────────
+# PASSO 4 — TESTAR VIA POSTMAN (RECOMENDADO)
+# ───────────────────────────────────────────────────────────────
+# O Postman é a forma mais visual e prática de testar o gateway.
+# Ideal para demonstração no vídeo de entrega.
+
+# ── Configurar o Postman ───────────────────────────────────────
+
+# 1. Criar uma Collection
+#    - Clique em "New" → "Collection"
+#    - Nome: FCG - Kong API Gateway
+
+# 2. Configurar variável de ambiente
+#    - Clique em "Environments" → "New Environment"
+#    - Nome: FCG Local
+#    - Adicione a variável:
+#        Variable: token
+#        Value:    (deixe vazio por enquanto)
+#    - Clique em "Save"
+#    - Selecione o environment "FCG Local" no canto superior direito
+
+# ── Teste 1: Sem token (401 Unauthorized) ─────────────────────
+# Demonstra que o Kong bloqueia requisições sem autenticação.
+#
+# 1. Clique em "New" → "Request"
+# 2. Nome: [KONG] GET /users sem token
+# 3. Método: GET
+# 4. URL: http://localhost:8000/users/api/Roles/ListarRoles
+# 5. Clique em "Send"
+# 6. Resposta esperada (Status 401):
+#    {"message":"Unauthorized"}
+
+# ── Teste 2: Gerar token via Postman ──────────────────────────
+# Você pode gerar o token diretamente no Postman, sem usar o Swagger.
+#
+# 1. Clique em "New" → "Request"
+# 2. Nome: [USERS] POST /login
+# 3. Método: POST
+# 4. URL: http://localhost:5001/api/Authentication/login
+# 5. Aba "Body" → selecione "raw" → selecione "JSON"
+# 6. Cole o body:
+{
+  "usuario": "seu_usuario",
+  "senha": "sua_senha"
+}
+# 7. Clique em "Send"
+# 8. Na resposta, copie o valor do campo "token"
+# 9. Vá em "Environments" → "FCG Local"
+# 10. Cole o token no campo "Current Value" da variável "token"
+# 11. Clique em "Save"
+
+# ── Teste 3: Com token válido (UsersAPI) ──────────────────────
+# Demonstra roteamento e autenticação funcionando pelo Kong.
+#
+# 1. Clique em "New" → "Request"
+# 2. Nome: [KONG] GET /users com token
+# 3. Método: GET
+# 4. URL: http://localhost:8000/users/api/Roles/ListarRoles
+# 5. Aba "Authorization":
+#    - Type: Bearer Token
+#    - Token: {{token}}   ← usa a variável de ambiente
+# 6. Clique em "Send"
+# 7. Resposta esperada (Status 200): lista de roles da UsersAPI
+
+# ── Teste 4: Com token válido (CatalogAPI) ────────────────────
+# Demonstra roteamento para outro microsserviço pelo Kong.
+#
+# 1. Clique em "New" → "Request"
+# 2. Nome: [KONG] GET /catalog com token
+# 3. Método: GET
+# 4. URL: http://localhost:8000/catalog/api/jogos
+# 5. Aba "Authorization":
+#    - Type: Bearer Token
+#    - Token: {{token}}
+# 6. Clique em "Send"
+# 7. Resposta esperada (Status 200): lista de jogos do CatalogAPI
+
+# ── Teste 5: Rate Limiting (429 Too Many Requests) ────────────
+# Demonstra a proteção de limite de requisições.
+#
+# 1. Abra o Teste 3 ([KONG] GET /users com token)
+# 2. Clique na seta ao lado de "Send" → "Send 30 times"
+#    Ou use o Runner do Postman:
+#    - Clique em "Runner" (ícone de play no canto superior)
+#    - Selecione a collection "FCG - Kong API Gateway"
+#    - Iterations: 35
+#    - Clique em "Run"
+# 3. A partir da 31ª requisição, a resposta muda para (Status 429):
+#    {"message":"API rate limit exceeded"}
+#
+# Para ver os headers de rate-limiting:
+# - Após enviar uma requisição, clique na aba "Headers" da resposta
+# - Procure:
+#     X-RateLimit-Limit-Minute: 30
+#     X-RateLimit-Remaining-Minute: 29  ← decrementa a cada requisição
+
+
+# ───────────────────────────────────────────────────────────────
+# PASSO 5 — TESTAR VIA CURL (ALTERNATIVA)
+# ───────────────────────────────────────────────────────────────
+# Com o Terminal 1 rodando, teste em um novo terminal:
+# Substitua SEU_TOKEN_AQUI pelo token gerado no Passo 3.
+
+# Teste sem token (401):
+curl.exe -X GET http://localhost:8000/users/api/Roles/ListarRoles
+
+# Teste com token (UsersAPI):
+curl.exe -X GET http://localhost:8000/users/api/Roles/ListarRoles -H "Authorization: Bearer SEU_TOKEN_AQUI"
+
+# Teste com token (CatalogAPI):
+curl.exe -X GET http://localhost:8000/catalog/api/jogos -H "Authorization: Bearer SEU_TOKEN_AQUI"
+
+# Ver headers de rate-limiting:
+curl.exe -v -X GET http://localhost:8000/users/api/Roles/ListarRoles -H "Authorization: Bearer SEU_TOKEN_AQUI"
+
+
+# ───────────────────────────────────────────────────────────────
+# PASSO 6 — VISUALIZAÇÃO VIA KONGA (OPCIONAL)
+# ───────────────────────────────────────────────────────────────
+# O Konga oferece interface visual completa para o Kong.
+# Requer o ambiente kong-visual/ rodando via Docker Compose.
+
+# 1. Subir o ambiente visual:
+cd OrchestrationApi/kong-visual
+docker compose up -d
+
+# 2. Acessar o Konga:
+http://localhost:1337
+
+# 3. Na primeira vez, crie um usuário admin.
+
+# 4. Conectar ao Kong:
+#    - Clique em "Connections" → "New Connection"
+#    - Name: FCG Kong
+#    - Kong Admin URL: http://kong:8001
+#    - Clique em "Activate"
+
+# 5. Parar o ambiente visual:
+docker compose down
+
+
+# ───────────────────────────────────────────────────────────────
+# SOLUÇÃO DE PROBLEMAS
+# ───────────────────────────────────────────────────────────────
+
+# Kong não responde:
+kubectl get pods -n kong
+kubectl logs deployment/kong -n kong --tail=20
+
+# Pods dos microsserviços com erro:
+kubectl get pods
+kubectl logs deployment/users-api --tail=20
+
+# Reiniciar o Kong:
+kubectl rollout restart deployment kong -n kong
+
+# Recarregar configuração do Kong após alterações no kong-config.yaml:
+kubectl delete configmap kong-config -n kong
+kubectl apply -f OrchestrationApi/k8s/kong/kong-config.yaml
+kubectl rollout restart deployment kong -n kong
+
+# Verificar se as rotas foram carregadas:
+kubectl port-forward service/kong-proxy 8001:8001 -n kong
+# Acesse: http://localhost:8001/routes
+
+# Token expirado (erro 401):
+# Gere um novo token via Swagger da UsersAPI (Passo 3)
+# ou via Postman (Teste 2 do Passo 4).
