@@ -88,6 +88,8 @@ O script `start-ecosystem.ps1` executa todas as etapas abaixo de forma automatic
 
 **Requisitos:** Docker Desktop em execucao e PowerShell.
 
+Navegar até o diretório que contenha o arquivo start-ecosystem.ps1 e executar o comando:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File ".\start-ecosystem.ps1"
 ```
