@@ -129,6 +129,34 @@ services:
       - RabbitMQ__Password=admin
       - Serilog__WriteTo__0__Args__databaseUrl=mongodb://root:root@mongodb:27017/logs_dev?authSource=admin
 
+  # ─── API GATEWAY ─────────────────────────────────────────
+
+  kong:
+    image: kong:3.6
+    container_name: kong
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yaml
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_ADMIN_GUI_LISTEN: "0.0.0.0:8002"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+    volumes:
+      - ./kong/kong.yaml:/kong/declarative/kong.yaml:ro
+    depends_on:
+      - users-api
+      - catalog-api
+
+  # ─── OBSERVABILIDADE ──────────────────────────────────────
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus

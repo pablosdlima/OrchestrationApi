@@ -113,9 +113,9 @@ Referencia rapida de todas as ferramentas do ecossistema apos subir o ambiente.
 | **Prometheus** | http://localhost:9090 | — | — | Coleta de metricas |
 | **LocalStack** (Health) | http://localhost:4566/_localstack/health | — | — | Status dos servicos AWS emulados |
 | **Redis** | `redis:6379` (interno) | — | — | Sem interface web — use `docker exec redis redis-cli` |
-| **Kong** (Proxy) | http://localhost:8000 | — | — | Apenas no modo Kubernetes |
-| **Kong** (Admin API) | http://localhost:8001 | — | — | Apenas no modo Kubernetes |
-| **Kong** (Manager UI) | http://localhost:8002 | — | — | Apenas no modo Kubernetes |
+| **Kong** (Proxy) | http://localhost:8000 | — | — | Entrada unica para UsersAPI e CatalogAPI |
+| **Kong** (Admin API) | http://localhost:8001 | — | — | Consultar rotas e plugins ativos |
+| **Kong** (Manager UI) | http://localhost:8002 | — | — | Interface web de gerenciamento |
 
 ---
 
@@ -393,7 +393,7 @@ docker exec localstack awslocal iam list-roles
 | **Admin API** | http://localhost:8001 | Consultar configuracoes do Kong |
 | **Kong Manager** | http://localhost:8002 | Interface web de gerenciamento |
 
-> O Kong so esta disponivel no modo Kubernetes. No Docker Compose, acesse os microsservicos diretamente pelas portas 5001, 5002 e 5003.
+> O Kong sobe automaticamente com o `docker compose up`. A configuracao declarativa esta em `kong/kong.yaml`. No Kubernetes, use os manifestos em `k8s/kong/`.
 
 ---
 
