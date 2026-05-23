@@ -161,7 +161,18 @@ Write-Ok "Repositorio NotificationsAPI encontrado."
 # ==============================================================================
 Write-Step "2" "Limpando ambiente anterior"
 
-Write-Info "Removendo todos os containers, imagens, volumes e redes Docker..."
+Write-Info "Derrubando stack do docker-compose (se houver) e removendo orfaos..."
+Set-Location $orchestraDir
+docker compose down -v --remove-orphans 2>$null | Out-Null
+
+Write-Info "Forcando remocao de containers ativos que podem causar conflito de nome..."
+$running = docker ps -a -q
+if ($running) {
+    docker rm -f $running 2>$null | Out-Null
+}
+Write-Ok "Containers removidos."
+
+Write-Info "Removendo imagens, volumes e redes Docker nao utilizadas..."
 docker system prune -a --volumes -f
 Write-Ok "Docker limpo."
 
