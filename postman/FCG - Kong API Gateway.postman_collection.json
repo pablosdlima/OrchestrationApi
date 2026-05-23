@@ -1,0 +1,230 @@
+{
+  "info": {
+    "_postman_id": "43677907-a953-4468-a6a0-a0262793cd68",
+    "name": "FCG - Kong API Gateway",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "11985604"
+  },
+  "item": [
+    {
+      "name": "[KONG] GET /users sem token",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/users/api/Roles/ListarRoles",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "users",
+            "api",
+            "Roles",
+            "ListarRoles"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "[USERS] POST /login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"usuario\": \"adm\",\r\n  \"senha\": \"adm\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:5001/api/Authentication/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5001",
+          "path": [
+            "api",
+            "Authentication",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "[KONG] GET /users com token",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": []
+    },
+    {
+      "name": "[Catalog] ListarGames",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{Token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8000/catalog/api/Game/ListarGames?NumeroPagina=1&TamanhoPagina=1",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "catalog",
+            "api",
+            "Game",
+            "ListarGames"
+          ],
+          "query": [
+            {
+              "key": "NumeroPagina",
+              "value": "1"
+            },
+            {
+              "key": "TamanhoPagina",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "[Users] Buscar Por ID",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{Token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/users/api/Usuarios/BuscarPorId/d095bcc0-244c-422c-82e6-1d53b4247da2",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "users",
+            "api",
+            "Usuarios",
+            "BuscarPorId",
+            "d095bcc0-244c-422c-82e6-1d53b4247da2"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "[KONG] Login",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"usuario\": \"admin\",\r\n  \"senha\": \"admin\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8000/users/api/Authentication/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "users",
+            "api",
+            "Authentication",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "[KONG] Cadastrar",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nome\": \"admin\",\r\n  \"senha\": \"admin\",\r\n  \"celular\": \"1140028922\",\r\n  \"email\": \"admin@email.com\",\r\n  \"tipoUsuario\": 1,\r\n  \"nomeCompleto\": \"admin admin\",\r\n  \"dataNascimento\": \"2026-05-23T14:05:52.045Z\",\r\n  \"pais\": \"Brasil\",\r\n  \"avatarUrl\": \"string\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8000/users/api/Usuarios/Cadastrar",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "users",
+            "api",
+            "Usuarios",
+            "Cadastrar"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
