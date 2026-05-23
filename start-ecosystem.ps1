@@ -163,12 +163,12 @@ Write-Step "2" "Limpando ambiente anterior"
 
 Write-Info "Derrubando stack do docker-compose (se houver) e removendo orfaos..."
 Set-Location $orchestraDir
-docker compose down -v --remove-orphans 2>$null | Out-Null
+docker compose down -v --remove-orphans | Out-Null
 
 Write-Info "Forcando remocao de containers ativos que podem causar conflito de nome..."
 $running = docker ps -a -q
 if ($running) {
-    docker rm -f $running 2>$null | Out-Null
+    docker rm -f $running | Out-Null
 }
 Write-Ok "Containers removidos."
 
@@ -177,11 +177,14 @@ docker system prune -a --volumes -f
 Write-Ok "Docker limpo."
 
 Write-Info "Limpando recursos do Kubernetes..."
-try {
-    kubectl delete all --all 2>$null | Out-Null
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+kubectl delete all --all 2>&1 | Out-Null
+$kubectlExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEAP
+if ($kubectlExit -eq 0) {
     Write-Ok "Kubernetes limpo."
-}
-catch {
+} else {
     Write-Host "  [AVISO] kubectl sem contexto ativo ou nao instalado - etapa ignorada." -ForegroundColor DarkYellow
 }
 
