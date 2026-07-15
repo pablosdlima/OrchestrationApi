@@ -1,0 +1,22 @@
+# Copie este arquivo para "terraform.tfvars" (fora do git — veja .gitignore)
+# e ajuste se precisar. Região e VM já refletem o que confirmamos junto com
+# a conta Free Trial. O subscription_id NÃO fica aqui — pegue o seu com
+# "az account show --query id -o tsv" e cole só no seu terraform.tfvars local.
+
+subscription_id = "<sua-subscription-id-aqui>" # az account show --query id -o tsv
+location         = "westus2"
+
+resource_group_name = "fcg-rg"
+cluster_name         = "fcg-aks-cluster"
+
+node_vm_size = "Standard_B2pts_v2"
+node_count   = 2 # baixe para 1 se quiser economizar mais horas do free tier
+
+# Precisa ser globalmente único em toda a Azure — se der erro de nome
+# duplicado no apply, troque para algo como "fcgacr<seu-nome>".
+acr_name = "fcgacr"
+
+github_repositories = [
+  "marciotorquato/UsersAPI",
+  "marciotorquato/CatalogAPI",
+]
