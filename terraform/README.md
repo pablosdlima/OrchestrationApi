@@ -1,16 +1,21 @@
-# Infraestrutura Azure (Fase 4) — AKS, ACR, OIDC — 100% Free Tier
+# Infraestrutura Azure (Fase 4) — AKS, ACR, OIDC — free tier + fatia mínima paga
 
-Provisiona a infraestrutura Cloud-Native exigida pelo Tech Challenge Fase 4, desenhada especificamente para caber no free tier da conta Azure (Free Trial):
+Provisiona a infraestrutura Cloud-Native exigida pelo Tech Challenge Fase 4, desenhada pra ficar o mais próximo possível de 100% free tier na conta Azure (Free Trial):
 
 - **Resource Group + VNet** — sempre gratuitos.
-- **AKS** (`sku_tier = "Free"`) — control plane sempre gratuito; node pool com `Standard_B2pts_v2` (única VM do free tier disponível pra essa assinatura em `westus2`, confirmada via `az vm list-skus`).
+- **AKS** (`sku_tier = "Free"`) — control plane sempre gratuito. **Dois node pools**:
+  - **Pool de sistema** (`system`, 1 node `Standard_D2s_v3`) — **pago** (~US$0,10/hora). O AKS exige VM com mais de 2 vCPU/4GB pro pool de sistema, e nenhuma VM do free tier atende isso — descobrimos na prática, com o erro `SystemPoolSkuTooLow`. Esse pool só roda componentes internos do Kubernetes (`only_critical_addons_enabled = true` impede qualquer pod da aplicação de cair aqui).
+  - **Pool de usuário** (`user`, 2 nodes `Standard_B2pts_v2`) — **free tier**, única VM do free tier disponível pra essa assinatura em `westus2` (confirmada via `az vm list-skus`). É aqui que a aplicação de verdade roda (Kong, UsersAPI, CatalogAPI, bancos etc).
 - **Azure Container Registry** (nível Standard) — 100GB grátis por 12 meses.
 - **Load Balancer Standard** — criado automaticamente pelo AKS quando um Service `LoadBalancer` é aplicado; 750h/mês grátis por 12 meses.
 - **Federação OIDC do GitHub Actions** — os workflows autenticam sem senha/secret fixo.
 
-## ⚠️ O único item que não está 100% coberto pela tabela de free tier
+## ⚠️ Itens que não são 100% free tier
 
-O **Public IP** (endereço IP público) que o Load Balancer usa não aparece como linha separada na tabela de serviços gratuitos da Azure — só o "Load Balancer" em si está listado. Na prática o custo de um Public IP Standard é pequeno (poucos centavos por hora), e fica coberto pelos US$ 200 de crédito enquanto ele durar. Sendo transparente: esse é o único ponto que tecnicamente pode gerar uma cobrança mínima fora da tabela que você me mostrou — mas nunca vai ser significativo dentro do padrão "sobe pra sessão, derruba depois".
+1. **Pool de sistema (`Standard_D2s_v3`)** — é o item de custo real, ~US$0,10/hora, inevitável (limitação da própria plataforma AKS, não uma escolha nossa). Em uso disciplinado (só durante sessões de trabalho) fica na faixa de **US$ 5 ou menos** até a apresentação; mesmo esquecido ligado 24/7 por 2 semanas, fica em ~US$ 34 — bem abaixo do crédito disponível.
+2. **Public IP do Load Balancer** — não aparece como linha separada na tabela de free tier (só "Load Balancer" está listado). Custo de poucos centavos por hora, também coberto pelo crédito.
+
+Ambos saem do crédito de US$ 200, não da cota do free tier — e juntos não chegam perto de esgotá-lo dentro do prazo do projeto.
 
 ## Pré-requisitos
 
@@ -61,11 +66,13 @@ az aks get-credentials --resource-group fcg-rg --name fcg-aks-cluster
 kubectl get nodes
 ```
 
+Devem aparecer **3 nodes**: 1 do pool `system` (`Standard_D2s_v3`, pago) e 2 do pool `user` (`Standard_B2pts_v2`, free tier — é ali que os manifestos da aplicação devem ser agendados).
+
 A partir daqui, aplique os manifestos base normalmente (`kubectl apply -f ...`) antes do primeiro deploy via pipeline.
 
 ## Disciplina de custo — leia antes de deixar rodando
 
-O free tier da VM (`Standard_B2pts_v2`) dá **750 horas/mês**. Com `node_count = 2`, isso dura **~15 dias corridos** se ficar ligado o tempo todo. Para não gastar à toa:
+O pool de sistema (`Standard_D2s_v3`) é pago o tempo todo que ficar ligado (~US$0,10/hora) — é o único item que realmente conta pro seu crédito. O pool de usuário (`Standard_B2pts_v2`) tem **750 horas/mês grátis**; com `node_count = 2`, esse orçamento dura ~15 dias corridos se ficar ligado sem parar (mas mesmo estourando, o custo adicional dessa parte seria mínimo). Para não gastar à toa:
 
 ```powershell
 # No fim de cada sessão de trabalho

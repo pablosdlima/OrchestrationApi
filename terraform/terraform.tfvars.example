@@ -9,7 +9,10 @@ location         = "westus2"
 resource_group_name = "fcg-rg"
 cluster_name         = "fcg-aks-cluster"
 
-node_vm_size = "Standard_B2pts_v2"
+system_node_vm_size = "Standard_D2s_v3" # pago, mínimo exigido pelo AKS pro pool de sistema (~US$0,10/hora)
+system_node_count   = 1                 # mantenha em 1 pra minimizar o custo pago
+
+node_vm_size = "Standard_B2pts_v2" # free tier, pool de usuário (roda a aplicação)
 node_count   = 2 # baixe para 1 se quiser economizar mais horas do free tier
 
 # Precisa ser globalmente único em toda a Azure — se der erro de nome
