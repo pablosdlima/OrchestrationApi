@@ -1,32 +1,38 @@
-# ─── Service ─────────────────────────────────────────────────
-# Expõe o Kong para fora do cluster via NodePort.
-# Responsabilidade: definir as portas externas de acesso ao gateway.
-#
-# Portas expostas:
-#   30080 → proxy HTTP  (entrada de todas as requisições dos clientes)
-#   30081 → Admin API   (gerenciamento via curl ou ferramentas REST)
-#   30082 → Kong Manager OSS (interface web de visualização)
+# ─── Services ────────────────────────────────────────────────
+# Fase 4: o proxy do Kong (entrada de tráfego dos clientes) passa a ser
+# exposto via LoadBalancer (Azure Load Balancer Standard), substituindo o
+# NodePort da Fase 3. Admin API e Kong Manager continuam só internos
+# (ClusterIP) — não fazem sentido expostos publicamente na internet;
+# acesse via port-forward:
+#   kubectl port-forward service/kong-admin 8001:8001 -n kong
+#   kubectl port-forward service/kong-admin 8002:8002 -n kong
 apiVersion: v1
 kind: Service
 metadata:
   name: kong-proxy
   namespace: kong
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: kong
   ports:
     - name: proxy
       port: 80
-      targetPort: 8000
-      nodePort: 30080   # http://localhost:30080 → entrada do gateway (proxy)
-
+      targetPort: 8000 # kubectl get service kong-proxy -n kong → EXTERNAL-IP = ponto de entrada público
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-admin
+  namespace: kong
+spec:
+  type: ClusterIP
+  selector:
+    app: kong
+  ports:
     - name: admin
       port: 8001
       targetPort: 8001
-      nodePort: 30081   # http://localhost:30081 → Admin API (gerenciamento kong)
-
     - name: manager
       port: 8002
       targetPort: 8002
-      nodePort: 30082   # http://localhost:30082 → Kong Manager OSS
