@@ -4,7 +4,7 @@ variable "subscription_id" {
 }
 
 variable "location" {
-  description = "Região do Azure — precisa ter a VM Standard_B2pts_v2 disponível (confirmado em westus2)"
+  description = "Região do Azure (westus2 já confirmada como funcional pro cluster)"
   type        = string
   default     = "westus2"
 }
@@ -45,36 +45,20 @@ variable "subnet_cidr" {
   default     = "10.42.1.0/24"
 }
 
-# ─── Pool de sistema (pago, mínimo) ────────────────────────────────
-# O AKS exige mais de 2 vCPUs/4GB no pool de sistema — nenhuma VM do
-# free tier atende. Standard_D2s_v3 é uma VM genérica pequena e barata
-# (~US$0,10/hora), usada só pelos componentes internos do Kubernetes.
-variable "system_node_vm_size" {
-  description = "Tamanho da VM do pool de sistema do AKS (precisa ser > 2 vCPU/4GB — fora do free tier)"
+# ─── Node pool (pago) ───────────────────────────────────────────────
+# O AKS bloqueia VMs do free tier (Standard_B2pts_v2/B2ats_v2, 2 vCPU/
+# 4GB) em qualquer pool — erro VMSizeRestrictedByAKS, confirmado na
+# prática. Standard_D2s_v3 é a menor VM viável (2 vCPU/8GB,
+# ~US$0,10/hora). Recomendado: subir só durante as sessões de trabalho
+# e destruir depois (terraform destroy) pra minimizar o custo.
+variable "node_vm_size" {
+  description = "Tamanho da VM do node pool do AKS (precisa ser maior que o free tier — bloqueado pela própria AKS)"
   type        = string
   default     = "Standard_D2s_v3"
 }
 
-variable "system_node_count" {
-  description = "Quantidade de nodes do pool de sistema (mantenha em 1 pra minimizar o custo pago)"
-  type        = number
-  default     = 1
-}
-
-# ─── Pool de usuário (free tier) ───────────────────────────────────
-# Standard_B2pts_v2 é a única VM do free tier disponível pra essa
-# assinatura na região westus2 (Standard_B2ats_v2 veio restrito). É
-# aqui que a aplicação de verdade roda (Kong, UsersAPI, CatalogAPI,
-# bancos etc). Recomendado: subir só durante as sessões de trabalho e
-# destruir depois (terraform destroy).
-variable "node_vm_size" {
-  description = "Tamanho da VM do pool de usuário do AKS (onde a aplicação roda)"
-  type        = string
-  default     = "Standard_B2pts_v2"
-}
-
 variable "node_count" {
-  description = "Quantidade de nodes do pool de usuário (2 dá mais margem de recursos pro stack completo; 1 economiza mais horas do free tier)"
+  description = "Quantidade de nodes do AKS (2 dá margem de recursos pro stack completo)"
   type        = number
   default     = 2
 }
