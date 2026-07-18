@@ -26,6 +26,13 @@ spec:
       labels:
         app: sqlserver
     spec:
+      # O container roda como usuário não-root "mssql" (UID 10001), mas o
+      # volume persistente (Azure Disk) monta com dono "root" por padrão —
+      # sem isso, o SQL Server não consegue escrever em /var/opt/mssql
+      # ("Permission denied" ao criar /.system). fsGroup ajusta a
+      # propriedade do volume pro grupo do usuário mssql conseguir escrever.
+      securityContext:
+        fsGroup: 10001
       containers:
         - name: sqlserver
           image: mcr.microsoft.com/mssql/server:2022-latest
