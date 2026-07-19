@@ -31,6 +31,14 @@ spec:
       labels:
         app: elasticsearch
     spec:
+      # O container roda como usuário não-root "elasticsearch" (UID 1000),
+      # mas o volume persistente (Azure Disk) monta com dono root por
+      # padrão — sem isso, o ES falha no boot com "AccessDeniedException"
+      # ao tentar criar /usr/share/elasticsearch/data/node.lock. Mesmo
+      # ajuste que já fizemos pro SQL Server, valor de UID diferente
+      # (esse é o padrão da imagem oficial do Elasticsearch).
+      securityContext:
+        fsGroup: 1000
       # O Elasticsearch exige vm.max_map_count >= 262144 no host. O valor
       # padrão dos nodes do AKS costuma vir abaixo disso — sem esse
       # initContainer, o pod falha no bootstrap check ao iniciar.
