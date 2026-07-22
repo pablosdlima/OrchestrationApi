@@ -1,11 +1,13 @@
 # FCG - FIAP Cloud Games | OrchestrationAPI
 
-Repositório de orquestração da arquitetura de microsserviços da **FIAP Cloud Games (FCG)**, desenvolvido como entregável do **Tech Challenge Fase 3 - PosTech FIAP**.
+Repositório de orquestração da arquitetura de microsserviços da **FIAP Cloud Games (FCG)**, desenvolvido como entregável do **Tech Challenge — PosTech FIAP** (Fase 3 e Fase 4).
 
 Este repositório contém:
 - `docker-compose.yml` — sobe toda a infraestrutura e microsserviços localmente
-- `k8s/` — manifestos Kubernetes para execução em cluster
+- `k8s/` — manifestos Kubernetes para execução em cluster (local e AKS)
 - `k8s/kong/` — manifestos do Kong API Gateway
+- `k8s/elasticsearch.yaml` — Elasticsearch self-hosted no cluster (Fase 4)
+- `terraform/` — Infraestrutura como Código: AKS, ACR e OIDC do GitHub Actions (Fase 4)
 - `observability/` — configurações de Prometheus e Grafana para Docker Compose
 - `start-ecosystem.ps1` — script único que sobe todo o ecossistema do zero
 
@@ -25,6 +27,32 @@ UsersAPI e CatalogAPI expõem métricas no formato Prometheus (`/metrics`). O Gr
 ### 4. Persistência Poliglota
 - **Redis** (cache distribuído): UsersAPI usa `IDistributedCache` com `StackExchange.Redis`. Consultas ao banco SQL Server são cacheadas por 10 minutos com a chave `UsersAPI:usuario:{guid}`.
 - **MongoDB** (NoSQL com driver oficial): CatalogAPI usa `MongoDB.Driver` para persistir avaliações de jogos (`GameRating`) na collection `game_ratings` do banco `MS_CatalogAPI`. Endpoints: `POST /api/Game/{id}/ratings` e `GET /api/Game/{id}/ratings`.
+
+---
+
+## Fase 4 — O que foi implementado
+
+### 1. Infraestrutura Gerenciada em Nuvem Real — Azure AKS via Terraform
+Todo o cluster Kubernetes de produção é provisionado via **Terraform** (`terraform/`), não mais só local:
+
+| Arquivo | Recurso |
+|---|---|
+| `terraform/aks.tf` | Cluster **Azure Kubernetes Service (AKS)**, RBAC do Azure AD habilitado |
+| `terraform/acr.tf` | **Azure Container Registry (ACR)** privado, com `AcrPull` concedido à identidade do AKS |
+| `terraform/github-oidc.tf` | Federação OIDC para o GitHub Actions autenticar na Azure sem senha/secret estático |
+| `terraform/network.tf` | Rede virtual e subnet dedicadas ao cluster |
+| `terraform/variables.tf` / `terraform.tfvars.example` | Variáveis configuráveis (nome do cluster, região, tamanho de VM) |
+
+> 💡 **Decisão documentada:** o AKS bloqueia VMs do tier gratuito (`Standard_B2pts_v2`/`B2ats_v2`) em qualquer node pool — erros `SystemPoolSkuTooLow` e `VMSizeRestrictedByAKS` surgem mesmo fora do pool de sistema. Não há contorno: rodar AKS de verdade exige uma VM paga, mesmo que pequena. Optamos pela menor opção viável, `Standard_D2s_v3` (2 vCPU/8GB, ~US$0,10/hora). O control plane do AKS, o ACR e o Load Balancer continuam gratuitos — só a VM em si é paga.
+
+### 2. Pipeline de CI/CD — GitHub Actions
+UsersAPI e CatalogAPI têm workflows próprios (`.github/workflows/ci-cd.yml` em cada repositório) que fazem build, testes, scan de vulnerabilidades (Trivy), push para o ACR e deploy via Rolling Update no AKS — autenticados via OIDC usando a federação criada em `terraform/github-oidc.tf`.
+
+### 3. Exposição Externa — Kong via LoadBalancer
+Em produção, os serviços não usam mais NodePort: o `service.yaml` de cada microsserviço é `ClusterIP`, e todo o acesso externo passa pelo **Kong**, exposto como `LoadBalancer` no cluster AKS.
+
+### 4. Busca Avançada — Elasticsearch self-hosted
+`k8s/elasticsearch.yaml` sobe o Elasticsearch diretamente no cluster (self-hosted via manifesto, sem depender de serviço gerenciado pago). A CatalogAPI consome esse Elasticsearch para o endpoint `GET /api/Search`, com fuzzy search e ordenação por relevância. O índice é sincronizado automaticamente a cada cadastro/atualização de jogo.
 
 ---
 
@@ -133,9 +161,9 @@ Referencia rapida de todas as ferramentas do ecossistema apos subir o ambiente.
 | **UsersAPI** (Swagger) | http://localhost:5001/swagger | — | — | Cadastro, login, usuarios |
 | **CatalogAPI** (Swagger) | http://localhost:5002/swagger | — | — | Jogos, compras, avaliacoes |
 | **PaymentsAPI** (Swagger) | http://localhost:5003/swagger | — | — | Pagamentos |
-| **RabbitMQ** (Management) | http://localhost:15672 | `admin` | `admin` | Filas, exchanges, mensagens |
-| **MongoDB** (Mongo Express) | http://localhost:8081 | `admin` | `admin` | Banco de dados NoSQL |
-| **Grafana** (Dashboards) | http://localhost:3000 | `admin` | `admin` | Metricas e observabilidade |
+| **RabbitMQ** (Management) | http://localhost:15672 | `RABBITMQ_DEFAULT_USER` | `RABBITMQ_DEFAULT_PASS` | Ver variaveis no `.env` local — nunca commitar valor real |
+| **MongoDB** (Mongo Express) | http://localhost:8081 | `ME_CONFIG_BASICAUTH_USERNAME` | `ME_CONFIG_BASICAUTH_PASSWORD` | Ver variaveis no `.env` local — nunca commitar valor real |
+| **Grafana** (Dashboards) | http://localhost:3000 | `GF_SECURITY_ADMIN_USER` | `GF_SECURITY_ADMIN_PASSWORD` | Ver variaveis no `.env` local — nunca commitar valor real |
 | **Prometheus** | http://localhost:9090 | — | — | Coleta de metricas |
 | **Prometheus** | http://localhost:9090/targets | — | — | Métricas criadas |
 | **LocalStack** (Health) | http://localhost:4566/_localstack/health | — | — | Status dos servicos AWS emulados |
@@ -221,7 +249,7 @@ payments-api | Application started.
 **Verificar o RabbitMQ** (deve retornar JSON com informacoes do servidor):
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:15672/api/overview" `
-    -Headers @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:admin")) }
+    -Headers @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:RABBITMQ_DEFAULT_USER`:$env:RABBITMQ_DEFAULT_PASS")) }
 ```
 
 **Verificar o LocalStack** (campo `lambda` deve ser `"running"` ou `"available"`):
@@ -316,7 +344,7 @@ Apos subir todo o ecossistema, use as URLs abaixo para acessar cada servico:
 
 | Servico | URL | Credenciais |
 |---|---|---|
-| **RabbitMQ Management** | http://localhost:15672 | usuario: `admin` / senha: `admin` |
+| **RabbitMQ Management** | http://localhost:15672 | ver `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` no `.env` local |
 
 No RabbitMQ Management voce pode:
 - Ver filas em `Queues` — procure `user-created-queue-notifications` e `payment-processed-queue-notifications`
@@ -327,7 +355,7 @@ No RabbitMQ Management voce pode:
 
 | Servico | URL | Credenciais |
 |---|---|---|
-| **Mongo Express** | http://localhost:8081 | usuario: `admin` / senha: `admin` |
+| **Mongo Express** | http://localhost:8081 | ver `ME_CONFIG_BASICAUTH_USERNAME` / `ME_CONFIG_BASICAUTH_PASSWORD` no `.env` local |
 
 No Mongo Express voce pode:
 - Ver os logs de todos os servicos no banco `logs_dev`
@@ -349,7 +377,7 @@ docker exec redis redis-cli TTL "UsersAPI:usuario:SEU-GUID-AQUI"
 
 | Servico | URL | Credenciais |
 |---|---|---|
-| **Grafana** | http://localhost:3000 | usuario: `admin` / senha: `admin` |
+| **Grafana** | http://localhost:3000 | ver `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` no `.env` local |
 | **Prometheus** | http://localhost:9090 | sem autenticacao |
 
 No **Grafana**:
@@ -492,7 +520,7 @@ curl http://localhost:8000/users/api/Usuarios/BuscarPorId/SEU-ID `
 ### Acessar o Grafana
 
 1. Abra http://localhost:3000
-2. Login: `admin` / `admin`
+2. Login: credenciais definidas em `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` (`.env` local)
 3. Menu lateral → `Dashboards` → `FCG - FIAP Cloud Games`
 
 ### Verificar targets no Prometheus
@@ -545,7 +573,7 @@ docker exec redis redis-cli TTL "UsersAPI:usuario:SEU-GUID"
 | `GET` | `/api/Game/{gameId}/ratings` | Retorna sumario com media, total e lista de avaliacoes |
 
 **Acessar as avaliacoes no Mongo Express:**
-1. Abra http://localhost:8081 (usuario: `admin` / senha: `admin`)
+1. Abra http://localhost:8081 (credenciais definidas em `ME_CONFIG_BASICAUTH_USERNAME` / `ME_CONFIG_BASICAUTH_PASSWORD` no `.env` local)
 2. Va em `MS_CatalogAPI` → `game_ratings`
 
 ---
@@ -667,10 +695,16 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ## Contexto Academico
 
-Projeto desenvolvido para o **Tech Challenge Fase 3** da pos-graduacao **PosTech - Arquitetura de Software em .NET com Azure** da FIAP.
+Projeto desenvolvido para o **Tech Challenge** da pos-graduacao **PosTech - Arquitetura de Software em .NET com Azure** da FIAP.
 
-**Objetivo:** Profissionalizar a arquitetura de microsservicos aplicando:
+**Fase 3 — Objetivo:** Profissionalizar a arquitetura de microsservicos aplicando:
 - API Gateway (Kong) com JWT, rate-limiting e CORS
 - Arquitetura Serverless (AWS Lambda via LocalStack) com IaC em Terraform
 - Observabilidade — Opcao A: Prometheus + Grafana
 - Persistencia Poliglota: Redis (cache) + MongoDB (driver oficial, dados de negocio)
+
+**Fase 4 — Objetivo:** Levar a infraestrutura para producao real na nuvem, com automacao:
+- Kubernetes gerenciado real (Azure AKS) e registro de imagens (Azure ACR), provisionados via Terraform
+- Pipeline de CI/CD (GitHub Actions) com build, testes, scan de vulnerabilidades e deploy automatizado via OIDC
+- Exposicao externa via Kong como `LoadBalancer` no cluster (substitui o NodePort local)
+- Busca avancada com Elasticsearch self-hosted no cluster, integrada a CatalogAPI
